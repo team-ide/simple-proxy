@@ -1,0 +1,154 @@
+name: release
+on:
+  push:
+    # tags: # 当我们提交代码为tag 是以'v'开头的时候才会触发自动部署到服务端 如 git push tag v0.1.0
+    #   - 'v*'
+    branches:
+      - main
+    #   - dev
+    # package.json 更改后再触发发布
+    # paths: [ "package.json" ]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # 下载源码
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # 读取发布版本
+      - name: Read Release Version
+        id: release_version
+        uses: ashley-taylor/read-json-property-action@v1.0
+        with:
+          path: package.json
+          property: version
+
+      - id: release_check
+        run: |
+          echo "::set-output name=RELEASE_STATUS::$(curl -I -m 10 -o /dev/null -s -w %{http_code} https://github.com/team-ide/teamide/releases/tag/v${{ steps.release_version.outputs.value }})"
+
+      # 读取发布说明
+      - name: Read Release Description
+        id: release_body
+        if: ${{ steps.release_check.outputs.RELEASE_STATUS == 404 }}
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: RELEASE.md
+
+      # 发布
+      - name: Create Release
+        id: create_release
+        if: ${{ steps.release_check.outputs.RELEASE_STATUS == 404 }}
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{steps.release_version.outputs.value}}
+          release_name: ${{steps.release_version.outputs.value}}
+          body: ${{steps.release_body.outputs.content}}
+          draft: true # 是否是草稿
+          prerelease: false # 是否是预发布
+
+      # 创建release相关目录
+      - run: |
+          mkdir -p release/amd64/simple-proxy
+          mkdir -p release/arm64/simple-proxy
+          
+          cp -rf README.md release/amd64/simple-proxy/
+          cp -rf CHANGELOG.md release/amd64/simple-proxy/
+          
+          cp -rf README.md release/arm64/simple-proxy/
+          cp -rf CHANGELOG.md release/arm64/simple-proxy/
+
+      - run: |
+          echo '{"upload_url":""}' > release/release.json
+
+      - if: ${{ steps.release_check.outputs.RELEASE_STATUS == 404 }}
+        run: |
+          echo '${{ steps.create_release.outputs.upload_url }}'
+          echo '{"upload_url":"${{ steps.create_release.outputs.upload_url }}"}' > release/release.json
+
+      # 读取发布地址
+      - id: release_upload_url
+        uses: ashley-taylor/read-json-property-action@v1.0
+        with:
+          path: release/release.json
+          property: upload_url
+
+      # 打包构建 Server
+      - name: Build Server
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.20.14"
+
+      # 将静态资源打包html.go
+      #          mv release/html.go internal/static/html.go
+      - run: |
+          go mod tidy
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -X simple-proxy.version=${{ steps.release_version.outputs.value }}" -o ./release/amd64/simple-proxy/server .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -X simple-proxy.version=${{ steps.release_version.outputs.value }}" -o ./release/arm64/simple-proxy/server .
+
+      - name: Set up Docker BuildX
+        uses: docker/setup-buildx-action@v2
+      - name: Login to DockerHub
+        uses: docker/login-action@v2
+        with:
+          #这里用到了github的secrets功能，避免账户和密码随仓库泄露
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - if: ${{ steps.release_upload_url.outputs.value != '' }}
+        name: Build and push amd64
+        #导入这个模块来完成自动编译和推送
+        uses: docker/build-push-action@v3
+        with:
+          context: "./release/"
+          file: ./release/Dockerfile-amd64
+          push: true
+          #在这里通过加入需要编译的平台和前面配好的QEMU，buildx来达到多平台编译 linux/amd64,linux/arm64,linux/arm
+          platforms: linux/amd64
+          #指定用户/仓库名
+          tags: teamide/simple-proxy:latest,teamide/simple-proxy:${{ steps.release_version.outputs.value }}
+      - if: ${{ steps.release_upload_url.outputs.value != '' }}
+        name: Build and push arm64
+        #导入这个模块来完成自动编译和推送
+        uses: docker/build-push-action@v3
+        with:
+          context: "./release/"
+          file: ./release/Dockerfile-arm64
+          push: true
+          #在这里通过加入需要编译的平台和前面配好的QEMU，buildx来达到多平台编译 linux/amd64,linux/arm64,linux/arm
+          platforms: linux/arm64
+          #指定用户/仓库名
+          tags: teamide/simple-proxy-arm64:latest,teamide/simple-proxy-arm64:${{ steps.release_version.outputs.value }}
+
+      - run: |
+          echo 'release_version:${{ steps.release_version.outputs.value }}'
+          echo 'release_upload_url:${{ steps.release_upload_url.outputs.value }}'
+          mv release/amd64/simple-proxy simple-proxy-amd64-${{steps.release_version.outputs.value}}
+          zip -q -r simple-proxy-amd64-${{steps.release_version.outputs.value}}.zip simple-proxy-amd64-${{steps.release_version.outputs.value}}
+          mv release/arm64/simple-proxy simple-proxy-arm64-${{steps.release_version.outputs.value}}
+          zip -q -r simple-proxy-arm64-${{steps.release_version.outputs.value}}.zip simple-proxy-arm64-${{steps.release_version.outputs.value}}
+          ls
+
+      # 上传 到 Release
+      - if: ${{ steps.release_upload_url.outputs.value != '' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.release_upload_url.outputs.value }} # 上传地址，通过创建Release获取到的
+          asset_path: simple-proxy-amd64-${{steps.release_version.outputs.value}}.zip
+          asset_name: simple-proxy-amd64-${{steps.release_version.outputs.value}}.zip # 上传后的文件名
+          asset_content_type: application/zip
+
+      - if: ${{ steps.release_upload_url.outputs.value != '' }}
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.release_upload_url.outputs.value }} # 上传地址，通过创建Release获取到的
+          asset_path: simple-proxy-arm64-${{steps.release_version.outputs.value}}.zip
+          asset_name: simple-proxy-arm64-${{steps.release_version.outputs.value}}.zip # 上传后的文件名
+          asset_content_type: application/zip
+

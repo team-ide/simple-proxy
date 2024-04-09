@@ -19,3 +19,8 @@
 
 # Go workspace file
 go.work
+
+/simple-proxy
+/simple-proxy.exe
+
+.idea

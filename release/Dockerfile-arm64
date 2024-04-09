@@ -1,0 +1,10 @@
+FROM alpine:3.19.1
+
+COPY arm64/simple-proxy /opt/simple-proxy
+COPY docker-entrypoint.sh /opt/simple-proxy/docker-entrypoint.sh
+
+RUN chmod +x /opt/simple-proxy/docker-entrypoint.sh
+
+WORKDIR /opt/simple-proxy
+
+CMD ["/opt/simple-proxy/docker-entrypoint.sh"]
