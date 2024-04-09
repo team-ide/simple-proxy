@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	cacheTTL          int64 = 1000 * 60 * 1 //缓存项存活时间 毫秒
-	reserved                = 5             // 连接池 预留连接
+	cacheTTL          int64 = 1000 * 60 * 5 //缓存项存活时间 毫秒
+	reserved                = 10            // 连接池 预留连接
 	connPoolCache           = map[string]*ConnPool{}
 	connPoolCacheLock       = &sync.Mutex{}
 )

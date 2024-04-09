@@ -57,9 +57,11 @@ jobs:
           
           cp -rf README.md release/amd64/simple-proxy/
           cp -rf CHANGELOG.md release/amd64/simple-proxy/
+          cp -rf release/server.sh release/amd64/simple-proxy/
           
           cp -rf README.md release/arm64/simple-proxy/
           cp -rf CHANGELOG.md release/arm64/simple-proxy/
+          cp -rf release/server.sh release/arm64/simple-proxy/
 
       - run: |
           echo '{"upload_url":""}' > release/release.json

@@ -165,7 +165,7 @@ func (this_ *Processor) Auth() (err error) {
 				endIndex++
 			}
 			toUrl := string(buf[8:endIndex])
-			fmt.Println("toUrl:", toUrl)
+			//fmt.Println("toUrl:", toUrl)
 			util.Logger.Info(this_.info + " dial target [" + toUrl + "] ")
 			this_.targetPool = GetConnPool(toUrl)
 			this_.target, err = this_.targetPool.Get()
@@ -178,8 +178,8 @@ func (this_ *Processor) Auth() (err error) {
 			if err != nil {
 				return
 			}
-			fmt.Println("read client:")
-			fmt.Println(string(bs[0:n]))
+			//fmt.Println("read client:")
+			//fmt.Println(string(bs[0:n]))
 			n, err = this_.client.Write([]byte(`HTTP/1.1 200 Connection
 Content-Length: 0
 
@@ -306,8 +306,8 @@ func (this_ *Processor) ReadClientToTarget(wait *sync.WaitGroup) {
 	for {
 		nr, er := this_.client.Read(buf)
 		if nr > 0 {
-			fmt.Println("read client message:")
-			fmt.Println(string(buf[0:nr]))
+			//fmt.Println("read client message:")
+			//fmt.Println(string(buf[0:nr]))
 			nw, ew := this_.target.conn.Write(buf[0:nr])
 			if nw < 0 || nr < nw {
 				nw = 0
@@ -347,8 +347,8 @@ func (this_ *Processor) ReadTargetToClient(wait *sync.WaitGroup) {
 	for {
 		nr, er := this_.target.conn.Read(buf)
 		if nr > 0 {
-			fmt.Println("read target message:")
-			fmt.Println(string(buf[0:nr]))
+			//fmt.Println("read target message:")
+			//fmt.Println(string(buf[0:nr]))
 			nw, ew := this_.client.Write(buf[0:nr])
 			if nw < 0 || nr < nw {
 				nw = 0
